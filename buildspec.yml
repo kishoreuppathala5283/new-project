@@ -20,7 +20,7 @@ phases:
      - echo pushing in to docker ECR...
      - docker push 711387094662.dkr.ecr.us-east-1.amazonaws.com/test-repo:latest
      - echo Writing image definition file..
-     - printf '[{"name":"%s","imageUri":"%s"}]' "test" "711387094662.dkr.ecr.us-east-1.amazonaws.com/test-repo" > imagedefinitions.json
+     - printf '[{"name":"%s","imageUri":"%s"}]' "node-cluster" "711387094662.dkr.ecr.us-east-1.amazonaws.com/test-repo" > imagedefinitions.json
 
 
 artifacts:
