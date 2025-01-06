@@ -10,17 +10,17 @@ phases:
     commands:
       - echo Build started
       - echo Building the docker image
-      - docker build -t nodejs .
-      - docker tag nodejs:latest 711387094662.dkr.ecr.us-east-1.amazonaws.com/nodejs:latest
+      - docker build -t test-repo .
+      - docker tag test-repo:latest 711387094662.dkr.ecr.us-east-1.amazonaws.com/test-repo:latest
 
 
   post_build:
     commands:
      - echo build completed
      - echo pushing in to docker ECR...
-     - docker push 711387094662.dkr.ecr.us-east-1.amazonaws.com/nodejs:latest
+     - docker push 711387094662.dkr.ecr.us-east-1.amazonaws.com/test-repo:latest
      - echo Writing image definition file..
-     - printf '[{"name":"%s","imageUri":"%s"}]' "test1" "711387094662.dkr.ecr.us-east-1.amazonaws.com/nodejs" > imagedefinitions.json
+     - printf '[{"name":"%s","imageUri":"%s"}]' "test" "711387094662.dkr.ecr.us-east-1.amazonaws.com/test-repo" > imagedefinitions.json
 
 
 artifacts:
