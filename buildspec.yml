@@ -1,25 +1,32 @@
 version: 0.2
 
 phases:
-  pre_build:
+  install:
+    runtime-versions:
+      nodejs: 14
     commands:
-      - echo Logging in to Amazon ECR...
-      - aws --version
-      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
-      - REPOSITORY_URI=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME
+      # Install dependencies if needed (example: for npm-based projects)
+      echo "Installing dependencies..."
+      npm install # If you have any dependencies like npm packages, use this
+
   build:
     commands:
-      - echo Build started on `date`
-      - echo Building the Docker image...
-      - docker build -t $REPOSITORY_URI:$IMAGE_TAG .
-      - docker tag $REPOSITORY_URI:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
+      echo "Building the website..."
+      # Add any build commands you need (e.g., if using a build tool like webpack)
+      # For example, run `npm run build` if you have a build step
+      # npm run build
+
   post_build:
     commands:
-      - echo Build completed on `date`
-      - echo Pushing the Docker images...
-      - docker push $REPOSITORY_URI:$IMAGE_TAG
-      - echo Writing image definitions file...
-      - printf '[{"name":"%s","imageUri":"%s"}]' $CONTAINER_NAME $REPOSITORY_URI:$IMAGE_TAG > imagedefinitions.json
+      echo "Post build tasks..."
 
 artifacts:
-    files: imagedefinitions.json
+  files:
+    - '**/*'         # Include all files in the current directory and subdirectories
+    - '!**/node_modules/**' # Exclude node_modules folder if using npm
+  discard-paths: yes # Discard folder structure to just deploy the files
+  base-directory: ./ # You can change this if your build output is in a subfolder
+
+cache:
+  paths:
+    - '/root/.npm/**/*' # Cache npm dependencies (if applicable)
