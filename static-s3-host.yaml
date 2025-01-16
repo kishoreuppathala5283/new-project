@@ -1,0 +1,321 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Cloudformation template for code pipeline
+
+Parameters:
+  # Tagging Params
+  ApplicationName:
+    Description: Name of application
+    Type: String
+    MinLength: "1"
+    MaxLength: "255"
+    AllowedPattern: '[\x20-\x7E]*'
+    ConstraintDescription: Must contain only ASCII characters.
+  #stack params
+  SourceBucketName:
+    Description: git source
+    Default: git-web-hook-outputbucket
+    Type: String
+  DevDistributionID:
+    Description: Dev Cloudfront Distribution ID
+    Type: String
+  ProdDistributionID:
+    Description: Prod Cloudfront Distribution ID
+    Type: String
+  DevDeployBucket:
+    Description: Deploy Bucket ARN
+    Type: String
+  DevDeployBucketName:
+    Description: Deploy Bucket Name
+    Type: String
+  ProdDeployBucket:
+    Description: Deploy Bucket ARN
+    Type: String
+  ProdDeployBucketName:
+    Description: Deploy Bucket Name
+    Type: String
+  CodePipelineBucketPrefix:
+    Description: CodePipeline needs a utility bucket for its internal use. Specify a unique prefix for the bucket name
+    Type: String
+  # assume role arn
+  AssumeRoleArn: 
+    Description: Prod Assume Role ARN
+    Type: String
+
+Resources:
+  Pipeline:
+    Type: "AWS::CodePipeline::Pipeline"
+    Properties:
+      Name: gatsby-site-pipeline
+      RoleArn: !GetAtt CodePipelineRole.Arn
+      ArtifactStore:
+        Location: !Ref PipelineBucket
+        Type: S3
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source-Action
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: 1
+                Provider: S3
+              OutputArtifacts:
+                - Name: gatsby-site-source-artifact
+              Configuration:
+                S3Bucket: !Ref SourceBucketName
+                S3ObjectKey: new-project # <repo-name>-<branch-name>
+                PollForSourceChanges: true
+              RunOrder: 1
+        - Name: Dev
+          Actions:
+            - Name: Deploy-Dev
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              InputArtifacts:
+                - Name: gatsby-site-source-artifact
+              OutputArtifacts:
+                - Name: gatsby-site-dev-build-artifact
+              Configuration:
+                ProjectName: !Ref DevCodeBuild
+              RunOrder: 1
+        - Name: Prod
+          Actions:
+            - Name: Deploy-Prod-Approval
+              ActionTypeId:
+                Category: Approval
+                Owner: AWS
+                Provider: Manual
+                Version: "1"
+              RunOrder: 1
+            - Name: Deploy-Prod
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              InputArtifacts:
+                - Name: gatsby-site-source-artifact
+              OutputArtifacts:
+                - Name: gatsby-site-prod-build-artifact
+              Configuration:
+                ProjectName: !Ref ProdCodeBuild
+              RunOrder: 2
+  CodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        "Fn::Join": ["", ["CodeBuildRole", "-", !Ref "AWS::StackName"]]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - "codebuild.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /service-role/
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:GetBucketVersioning"
+                  - "s3:PutObject"
+                Resource:
+                  - !GetAtt PipelineBucket.Arn
+                  - !Join ["", [!GetAtt PipelineBucket.Arn, "/*"]]
+              - Effect: Allow
+                Action:
+                  - "s3:ListAllMyBuckets"
+                  - "s3:ListBucket"
+                  - "s3:HeadBucket"
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:GetBucketVersioning"
+                  - "s3:PutObject"
+                  - "s3:PutObjectAcl"
+                  - "s3:DeleteObject"
+                Resource:
+                  - !Ref DevDeployBucket
+                  - !Join ["", [!Ref DevDeployBucket, "/*"]]
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeDhcpOptions
+                  - ec2:CreateNetworkInterfacePermission
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterfacePermission
+                  - ec2:DeleteNetworkInterface
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - cloudfront:CreateInvalidation
+                Resource:
+                  - "*"
+  ProdCodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        "Fn::Join": ["", ["CodeBuildRole-Prod", "-", !Ref "AWS::StackName"]]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - "codebuild.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: /service-role/
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:GetBucketVersioning"
+                  - "s3:PutObject"
+                Resource:
+                  - !GetAtt PipelineBucket.Arn
+                  - !Join ["", [!GetAtt PipelineBucket.Arn, "/*"]]
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeDhcpOptions
+                  - ec2:CreateNetworkInterfacePermission
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterfacePermission
+                  - ec2:DeleteNetworkInterface
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - "*"
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource: !Ref AssumeRoleArn
+  CodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        "Fn::Join": ["", ["CodePipelineRole", "-", !Ref "AWS::StackName"]]
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - "codepipeline.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "s3:GetObject"
+                  - "s3:GetObjectVersion"
+                  - "s3:GetBucketVersioning"
+                  - "s3:PutObject"
+                Resource:
+                  - !GetAtt PipelineBucket.Arn
+                  - !Join ["", [!GetAtt PipelineBucket.Arn, "/*"]]
+                  - Fn::Sub: "arn:aws:s3:::${SourceBucketName}*"
+                  - Fn::Sub: "arn:aws:s3:::${SourceBucketName}/*"
+              - Effect: Allow
+                Action:
+                  - "codebuild:BatchGetBuilds"
+                  - "codebuild:StartBuild"
+                Resource: "*"
+  DevCodeBuild:
+    Type: "AWS::CodeBuild::Project"
+    Properties:
+      Name: !Sub ${AWS::StackName}-dev-build
+      Description: gatsby site build
+      ServiceRole: !GetAtt CodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Type: LINUX_CONTAINER
+        Image: "aws/codebuild/amazonlinux2-x86_64-standard:2.0"
+        EnvironmentVariables:
+          - Name: DISTRIBUTION_ID
+            Value: !Ref DevDistributionID
+          - Name: DEPLOY_BUCKET_NAME
+            Value: !Ref DevDeployBucketName
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: "buildspec-dev.yaml"
+      Tags:
+        - Key: Technical:ApplicationName
+          Value: !Ref ApplicationName
+
+  ProdCodeBuild:
+    Type: "AWS::CodeBuild::Project"
+    Properties:
+      Name: !Sub ${AWS::StackName}-prod-build
+      Description: gatsby site build
+      ServiceRole: !GetAtt ProdCodeBuildRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Type: LINUX_CONTAINER
+        Image: "aws/codebuild/amazonlinux2-x86_64-standard:2.0"
+        EnvironmentVariables:
+          - Name: DISTRIBUTION_ID
+            Value: !Ref ProdDistributionID
+          - Name: DEPLOY_BUCKET_NAME
+            Value: !Ref ProdDeployBucketName
+          - Name: PROD_ROLE_ARN
+            Value: !Ref AssumeRoleArn
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: "buildspec-prod.yaml"
+      Tags:
+        - Key: Technical:ApplicationName
+          Value: !Ref ApplicationName
+
+  PipelineBucket:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName:
+        !Join ["", [!Ref CodePipelineBucketPrefix, "-", !Ref "AWS::Region"]]
+      Tags:
+        - Key: Name
+          Value: !Sub ${CodePipelineBucketPrefix}-pipeline
+        - Key: Technical:ApplicationName
+          Value: !Ref ApplicationName
+
+Outputs:
+  Pipeline:
+    Value: !Ref Pipeline
+  DevCodeBuild:
+    Value: !Ref DevCodeBuild
+  CodeBuildRole:
+    Value: !Ref CodeBuildRole
+  CodePipelineRole:
+    Value: !Ref CodePipelineRole
+  PipelineBucket:
+    Value: !Ref PipelineBucket
