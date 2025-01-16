@@ -63,7 +63,7 @@ Resources:
                 - Name: gatsby-site-source-artifact
               Configuration:
                 S3Bucket: !Ref SourceBucketName
-                S3ObjectKey: new-project # <repo-name>-<branch-name>
+                S3ObjectKey: new-project.zip # <repo-name>-<branch-name>
                 PollForSourceChanges: true
               RunOrder: 1
         - Name: Dev
