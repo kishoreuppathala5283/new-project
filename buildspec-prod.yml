@@ -1,0 +1,27 @@
+version: 0.2
+phases:
+  install:
+    runtime-versions:
+        nodejs: 12
+  pre_build:
+    commands:
+      - echo Installing source NPM dependencies...
+      - node -v
+      - npm -v
+      - npm install
+  build:
+    commands:
+      - echo Prod Build started on `date`
+      - npm run build
+      - chmod +x ./scripts/assume-role.sh
+      - ./scripts/assume-role.sh ${PROD_ROLE_ARN} prod
+  post_build:
+    commands:
+      - aws s3 rm --recursive s3://${DEPLOY_BUCKET_NAME} --profile prod
+      - cd public
+      - aws s3 sync . s3://${DEPLOY_BUCKET_NAME} --profile prod
+      - aws cloudfront create-invalidation --profile prod --distribution-id ${DISTRIBUTION_ID} --paths "/*"
+artifacts:
+  files:
+    - '**/*'
+  base-directory: public
